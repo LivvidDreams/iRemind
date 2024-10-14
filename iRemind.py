@@ -35,10 +35,14 @@ def get_new_messages(processed_ids):
 
     new_messages = []
     for msg_id, text, handle_id in messages:
-        if msg_id not in processed_ids and '!remindme' in text.lower():
-            new_messages.append((msg_id, text, handle_id))
-            processed_ids.add(msg_id)
+        try:
+            if msg_id not in processed_ids and '!remindme' in text.lower():
+                new_messages.append((msg_id, text, handle_id))
+                processed_ids.add(msg_id)
+        except:
+            continue
     return new_messages
+
 
 def parse_time_interval(message):
     pattern = r"!remindme\s+(\d+)\s*(h|hr|hrs|hour|hours|m|min|mins|minute|minutes)"
@@ -60,7 +64,9 @@ def send_reminder(handle_id):
         send "Reminder!" to targetBuddy
     end tell
     '''
-    subprocess.run(['osascript', '-e', applescript])
+    result = subprocess.run(['osascript', '-e', applescript], capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"Error sending reminder: {result.stderr}")
 
 def schedule_reminder(delay, handle_id):
     threading.Timer(delay, send_reminder, args=(handle_id,)).start()
@@ -69,9 +75,11 @@ def main():
     processed_ids = set()
     while True:
         new_messages = get_new_messages(processed_ids)
+        print("Messages set: ", new_messages)
         for msg_id, text, handle_id in new_messages:
             delay = parse_time_interval(text)
             if delay:
+                print(f"handle new msg -- {delay} for {msg_id} {handle_id} {text}")
                 schedule_reminder(delay, handle_id)
         time.sleep(30)
 
