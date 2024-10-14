@@ -18,11 +18,13 @@ def get_new_messages(processed_ids):
     SELECT 
         message.rowid, 
         message.text, 
-        handle.id AS handle_id
+        chat.chat_identifier AS chat_id
     FROM 
         message
     JOIN 
-        handle ON message.handle_id = handle.rowid
+        chat_message_join ON message.rowid = chat_message_join.message_id
+    JOIN 
+        chat ON chat_message_join.chat_id = chat.rowid
     WHERE 
         message.is_from_me = 1
     ORDER BY 
@@ -34,15 +36,14 @@ def get_new_messages(processed_ids):
     conn.close()
 
     new_messages = []
-    for msg_id, text, handle_id in messages:
+    for msg_id, text, chat_id in messages:
         try:
             if msg_id not in processed_ids and '!remindme' in text.lower():
-                new_messages.append((msg_id, text, handle_id))
+                new_messages.append((msg_id, text, chat_id))
                 processed_ids.add(msg_id)
         except:
             continue
     return new_messages
-
 
 def parse_time_interval(message):
     pattern = r"!remindme\s+(\d+)\s*(h|hr|hrs|hour|hours|m|min|mins|minute|minutes)"
@@ -56,33 +57,33 @@ def parse_time_interval(message):
             return value * 60    # Convert minutes to seconds
     return None
 
-def send_reminder(handle_id):
+def send_reminder(chat_id):
     applescript = f'''
     tell application "Messages"
-        set targetService to 1st service whose service type = iMessage
-        set targetBuddy to buddy "{handle_id}" of targetService
-        send "Reminder!" to targetBuddy
+        set targetChat to first chat whose id contains "{chat_id}"
+        send "Reminder!" to targetChat
     end tell
     '''
     result = subprocess.run(['osascript', '-e', applescript], capture_output=True, text=True)
     if result.returncode != 0:
         print(f"Error sending reminder: {result.stderr}")
+    else:
+        print(f"Reminder sent to chat_id: {chat_id}")
 
-def schedule_reminder(delay, handle_id):
-    threading.Timer(delay, send_reminder, args=(handle_id,)).start()
+def schedule_reminder(delay, chat_id):
+    threading.Timer(delay, send_reminder, args=(chat_id,)).start()
 
 def main():
     processed_ids = set()
     while True:
         new_messages = get_new_messages(processed_ids)
         print("Messages set: ", new_messages)
-        for msg_id, text, handle_id in new_messages:
+        for msg_id, text, chat_id in new_messages:
             delay = parse_time_interval(text)
             if delay:
-                print(f"handle new msg -- {delay} for {msg_id} {handle_id} {text}")
-                schedule_reminder(delay, handle_id)
+                print(f"handle new msg -- {delay} for {msg_id} {chat_id} {text}")
+                schedule_reminder(delay, chat_id)
         time.sleep(30)
 
 if __name__ == '__main__':
     main()
-
